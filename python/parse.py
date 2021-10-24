@@ -1,3 +1,4 @@
+from numpy import datetime_as_string
 import psycopg2
 from psycopg2 import sql
 import sys
@@ -20,7 +21,7 @@ def get_words(read_ids):
       Множество из ключевых слов, относящихся к прочитанным книгам
       Если таковых нет - None
   """
-  words = execute_with_connection(sql.SQL("select keyword from key_words where rec_id in ({});").format(sql.SQL(',').join(map(sql.Literal,read_ids))))
+  words = execute_with_connection(sql.SQL("select key_word from key_words where rec_id in ({});").format(sql.SQL(',').join(map(sql.Literal,read_ids))))
   return set([list(word)[0] for word in words]) if words else None
 
 
@@ -42,6 +43,7 @@ def get_dict_words_by_ids(recommend_ids):
     if id not in d:
       d.update({id:set()})
     d[id].add(word) 
+  return d
 
 def get_same_books_from_given(recommend_ids,read_ids):
   """
@@ -59,11 +61,12 @@ def get_same_books_from_given(recommend_ids,read_ids):
   words_dict = get_dict_words_by_ids(recommend_ids)
   if not words_dict or len(words_dict)==0:
     return recommend_ids[:5]
-  
   for key in words_dict:
     words_dict[key] = len(words_dict[key] & book_words)
-  words_dict = sorted({v:k for k,v in words_dict.items()}.items())
-  return [i[1] for i in words_dict[:-5]]
+  words_dict = sorted([(v,k) for k,v in words_dict.items()])
+  for i in range(len(words_dict)-1,5):
+    words_dict.append((0,recommend_ids[i]))
+  return [list(i)[1] for i in words_dict[:5]]
 
 def get_user_rec_by_words(user_id,recommend_ids,read_ids):
   """
@@ -77,22 +80,21 @@ def get_user_rec_by_words(user_id,recommend_ids,read_ids):
         Каждое поле заключено в кавычки и разделено через ;
   """
   rec = get_same_books_from_given(recommend_ids, read_ids)
-  print(rec)
-  # arr = [user_id]
-  # for r in rec:
-  #   arr.append(r)
-  # output_file1.write(';'.join(['"{}"'.format(i) for i in arr]))
-  # output_file1.write('\n')
+  arr = [user_id]
+  for r in rec:
+    arr.append(r)
+  output_file1.write(';'.join(['"{}"'.format(i) for i in arr]))
+  output_file1.write('\n')
 
-  # for r in rec:
-  #   line = execute_with_connection(sql.SQL("SELECT main_catalog.title, authors.author, main_catalog.yea, annotation_text, main_catalog.rec_id FROM main_catalog LEFT JOIN authors using(author_id) LEFT JOIN annotations using(rec_id) WHERE main_catalog.rec_id = {};").format(sql.Literal(r)))
-  #   if not line:
-  #     continue
-  #   res =[user_id]
-  #   for i in line[0]:
-  #     res.append(i)
-  #   output_file2.write(';'.join(['"{}"'.format(i) if i else '' for i in res]))
-  #   output_file2.write('\n')
+  for r in rec:
+    line = execute_with_connection(sql.SQL("SELECT main_catalog.title, authors.author, main_catalog.yea, annotation_text, main_catalog.rec_id FROM main_catalog LEFT JOIN authors using(author_id) LEFT JOIN annotations using(rec_id) WHERE main_catalog.rec_id = {};").format(sql.Literal(r)))
+    if not line:
+      continue
+    res =[user_id]
+    for i in line[0]:
+      res.append(i)
+    output_file2.write(';'.join(['"{}"'.format(i) if i else '' for i in res]))
+    output_file2.write('\n')
 
 
 
@@ -200,7 +202,7 @@ def get_user_read_ids(user_id):
     Возвращает:
       список прочитанных книг
   """
-  lines = execute_with_connection(sql.SQL("select distinct catalogue_record_id from circulations where reader_id = {}").format(sql.Literal(user_id)))
+  lines = execute_with_connection(sql.SQL("select distinct rec_id from history_for_csv where reader_id = {}").format(sql.Literal(user_id)))
   return [list(i)[0] for i in lines]
 
 # Анализирует не занесенные в key_words аннотации, выделяет существительные и отправляет из на леммантизацию
@@ -268,11 +270,11 @@ nlp.max_length = 4000000 # трогать аккуратно изначальн�
 m = Mystem()
 
 
-# parse_until_nothing()
+parse_until_nothing()
 
 # output_file1 = open('out1.csv','w',encoding='utf-8')
 # output_file2 = open('out2.csv','w',encoding='utf-8')
 
-# get_recommend_usr(689794,[924153,1418709,1483632,149487,162412,869171,837536,12587]) #Выдает рекомендации
+# get_recommend_usr(232,[125858,712620,125829,461304,809892,1004667,1018985,125913,125852]) #Выдает рекомендации
 
 # print('End')
